@@ -4,7 +4,7 @@
 Sistema distribuido para comparar respuestas generadas por LLM con respuestas humanas de Yahoo Answers.
 
 ## Integrantes del Grupo
-- Nombre 1 - email@uc.cl
-- Nombre 2 - email@uc.cl
+- Sebastián Navarrete - sebastian.navarrete@mail.udp.cl
+- Matias Aranda - matias.aranda1@mail.udp.cl
 
 ## Estructura del Proyecto
