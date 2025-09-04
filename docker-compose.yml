@@ -1,0 +1,15 @@
+services:
+  llm-service:
+    build:
+      context: .  # 📌 El contexto es la RAIZ del proyecto
+      dockerfile: src/llm-client/Dockerfile  # 📌 Ruta relativa al Dockerfile
+    ports:
+      - "5050:5000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    # 📌 Remover el volumen temporalmente para debugging
+    # volumes:
+    #   - ./src/llm-client:/app
+    restart: unless-stopped
