@@ -37,3 +37,4 @@ class TrafficDistributions:
             current_rate = base_rate + amplitude * np.sin(2 * np.pi * elapsed / period)
             return np.random.exponential(1.0 / current_rate)
         return generator
+    
