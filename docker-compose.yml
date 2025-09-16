@@ -1,15 +1,27 @@
 services:
   llm-service:
     build:
-      context: .  # 📌 El contexto es la RAIZ del proyecto
-      dockerfile: src/llm-client/Dockerfile  # 📌 Ruta relativa al Dockerfile
+      context: .  #El contexto es la RAIZ del proyecto
+      dockerfile: src/llm-client/Dockerfile  #Ruta relativa al Dockerfile
     ports:
-      - "5050:5000"
+      - "5000:5000"
     env_file:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-    # 📌 Remover el volumen temporalmente para debugging
+    # Remover el volumen temporalmente para debugging
     # volumes:
     #   - ./src/llm-client:/app
     restart: unless-stopped
+
+  traffic-generator:
+    build:
+      context: .
+      dockerfile: src/traffic-generator/Dockerfile
+    depends_on:
+      - cache-service
+    environment:
+      - CACHE_SERVICE_URL=http://cache-service:8000
+    restart: unless-stopped
+    volumes:
+      - ./datasets:/app/datasets  # Montar datasets
