@@ -7,9 +7,9 @@ sys.path.append('/app')
 
 try:
     from services.gemini_service import gemini_service
-    print("✅ Gemini service imported successfully")
+    print("Gemini service imported successfully")
 except ImportError as e:
-    print(f"❌ Import error: {e}")
+    print(f"Import error: {e}")
     # Crear un servicio mock para testing
     class MockGeminiService:
         def generate_response(self, question):
