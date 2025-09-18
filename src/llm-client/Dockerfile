@@ -7,18 +7,17 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 📌 COPIAR requirements.txt primero
+# Copiar requirements.txt primero para aprovechar cache de Docker
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 📌 COPIAR TODO el contenido de la carpeta actual (src/llm-client)
-# al working directory (/app) del contenedor
+# 📌 COPIAR solo los archivos de llm-client, no todo el proyecto
 COPY . .
 
-# 📌 Verificar que los archivos se copiaron correctamente
-RUN echo "📁 Contenido de /app:" && ls -la && \
-    echo "📁 Contenido de /app/config:" && ls -la config/ && \
-    echo "📁 Contenido de /app/services:" && ls -la services/
+# Verificar que los archivos se copiaron correctamente
+RUN echo "Contenido de /app:" && ls -la && \
+    echo "Contenido de /app/config:" && ls -la config/ && \
+    echo "Contenido de /app/services:" && ls -la services/
 
 EXPOSE 5000
 

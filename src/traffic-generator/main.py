@@ -53,13 +53,13 @@ class TrafficGenerator:
                 return False
                 
         except requests.exceptions.RequestException as e:
-            print(f"Error de conexión: {e}")
+            print(f"Error de conexion: {e}")
             return False
 
     def generate_traffic(self, questions: list, distribution, duration: int = 60):
-        """Generar tráfico según la distribución especificada"""
-        print(f"Iniciando generación de tráfico por {duration} segundos...")
-        print(f"Distribución: {distribution.__name__ if hasattr(distribution, '__name__') else 'custom'}")
+        """Generar trafico según la distribución especificada"""
+        print(f"Iniciando generacion de trafico por {duration} segundos...")
+        print(f"Distribucion: {distribution.__name__ if hasattr(distribution, '__name__') else 'custom'}")
         
         start_time = time.time()
         self.request_count = 0
@@ -76,7 +76,7 @@ class TrafficGenerator:
             # Log cada 10 requests
             if self.request_count % 10 == 0:
                 success_rate = (self.success_count / self.request_count) * 100
-                print(f"Requests: {self.request_count}, Éxito: {success_rate:.1f}%")
+                print(f"Requests: {self.request_count}, Exito: {success_rate:.1f}%")
             
             # Esperar según la distribución
             wait_time = distribution()
@@ -90,7 +90,7 @@ class TrafficGenerator:
         success_rate = (self.success_count / self.request_count) * 100 if self.request_count > 0 else 0
         
         print("\n" + "="*50)
-        print("REPORTE FINAL DEL GENERADOR DE TRÁFICO")
+        print("REPORTE FINAL DEL GENERADOR DE TRAFICO")
         print("="*50)
         print(f"Total de requests: {self.request_count}")
         print(f"Requests exitosos: {self.success_count}")
@@ -98,14 +98,14 @@ class TrafficGenerator:
         print("="*50)
 
 def main():
-    parser = argparse.ArgumentParser(description='Generador de tráfico para el sistema de QA')
+    parser = argparse.ArgumentParser(description='Generador de trafico para el sistema de QA')
     parser.add_argument('--distribution', type=str, default='poisson', 
                        choices=['constant', 'poisson', 'bursty', 'sinusoidal'],
-                       help='Tipo de distribución de tráfico')
+                       help='Tipo de distribución de trafico')
     parser.add_argument('--rate', type=float, default=2.0, 
                        help='Tasa promedio de requests por segundo')
     parser.add_argument('--duration', type=int, default=300,
-                       help='Duración en segundos de la generación de tráfico')
+                       help='Duración en segundos de la generación de trafico')
     parser.add_argument('--dataset', type=str, default='datasets/sample_questions.json',
                        help='Ruta al dataset de preguntas')
     
@@ -130,7 +130,7 @@ def main():
     # Cargar preguntas
     questions = generator.load_questions(args.dataset)
     
-    # Generar tráfico
+    # Generar trafico
     generator.generate_traffic(questions, dist_func, args.duration)
 
 if __name__ == "__main__":

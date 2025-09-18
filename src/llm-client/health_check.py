@@ -7,10 +7,10 @@ def check_service():
         try:
             response = requests.get('http://localhost:5000/health', timeout=5)
             if response.status_code == 200:
-                print("✅ Service is healthy!")
+                print("Service is healthy!")
                 return True
         except requests.exceptions.RequestException as e:
-            print(f"❌ Attempt {i+1}/{max_retries}: {e}")
+            print(f"Attempt {i+1}/{max_retries}: {e}")
             time.sleep(2)
     return False
 
