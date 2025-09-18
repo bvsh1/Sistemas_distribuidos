@@ -1,8 +1,8 @@
 services:
   llm-service:
     build:
-      context: ./src/llm-client  # 📌 Contexto SOLO en la carpeta llm-client
-      dockerfile: Dockerfile     # 📌 Dockerfile está en el mismo directorio
+      context: ./src/llm-client  
+      dockerfile: Dockerfile    
     ports:
       - "5000:5000"
     env_file:
@@ -13,7 +13,7 @@ services:
 
   cache-service:
     build:
-      context: ./src/cache-system  # 📌 Contexto SOLO en cache-system
+      context: ./src/cache-system  
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -31,7 +31,7 @@ services:
 
   traffic-generator:
     build:
-      context: ./src/traffic-generator  # 📌 Contexto SOLO en traffic-generator
+      context: ./src/traffic-generator  
       dockerfile: Dockerfile
     depends_on:
       - cache-service
