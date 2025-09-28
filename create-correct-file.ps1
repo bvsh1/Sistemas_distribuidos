@@ -1,4 +1,11 @@
-﻿from flask import Flask, request, jsonify
+Write-Host "CREANDO ARCHIVO PYTHON CORRECTO"
+
+# 1. Parar servicios
+docker-compose down
+
+# 2. Crear el archivo Python correcto
+$pythonCode = @'
+from flask import Flask, request, jsonify
 import os
 import logging
 
@@ -134,3 +141,34 @@ def get_stats():
 if __name__ == '__main__':
     logger.info("Starting Cache Service with %s policy", CACHE_POLICY)
     app.run(host='0.0.0.0', port=8000, debug=False)
+'@
+
+# Guardar el archivo
+$pythonCode | Out-File -FilePath "src/cache-system/main.py" -Encoding utf8
+
+Write-Host "Archivo Python creado correctamente"
+
+# 3. Verificar que el archivo se creo bien
+Write-Host "Verificando sintaxis del archivo..."
+try {
+    python -m py_compile "src/cache-system/main.py"
+    Write-Host "Sintaxis Python correcta"
+} catch {
+    Write-Host "Error de sintaxis: $_"
+}
+
+# 4. Reconstruir
+Write-Host "Reconstruyendo servicio..."
+docker-compose build cache-service
+
+# 5. Iniciar
+Write-Host "Iniciando servicio..."
+docker-compose up -d cache-service
+
+# 6. Verificar
+Write-Host "Verificando estado..."
+Start-Sleep -Seconds 3
+docker-compose ps
+
+Write-Host "Verificando logs..."
+docker-compose logs cache-service --tail=10
