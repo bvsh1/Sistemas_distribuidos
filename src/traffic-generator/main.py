@@ -1,75 +1,139 @@
-from flask import Flask, request, jsonify
+import argparse
+import time
+import random
+import requests
+import json
+import sys
 import os
-import logging
+from distributions import TrafficDistributions
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
-
-# Servicio mock para cuando Gemini no está disponible
-class MockGeminiService:
-    def __init__(self):
-        self.responses = {
-            "python": "Python es un lenguaje de programación interpretado de alto nivel, conocido por su sintaxis clara y legible. Se usa en desarrollo web, ciencia de datos e IA.",
-            "docker": "Docker es una plataforma de contenedorización que permite empaquetar aplicaciones y sus dependencias en contenedores portables.",
-            "machine learning": "Machine learning es una rama de la IA que desarrolla sistemas que pueden aprender de datos y mejorar su rendimiento automáticamente.",
-            "distributed systems": "Un sistema distribuido es un conjunto de computadoras independientes que aparecen como un sistema único para los usuarios."
-        }
-    
-    def generate_response(self, question):
-        question_lower = question.lower()
-        for key, response in self.responses.items():
-            if key in question_lower:
-                return response
-        return f"Respuesta simulada para: {question}. Este es un servicio mock para desarrollo."
-
-# Intentar importar el servicio real de Gemini
-try:
-    from services.gemini_service import gemini_service
-    logger.info("Gemini service imported successfully")
-except ImportError as e:
-    logger.warning(f"Using mock service - Import failed: {e}")
-    gemini_service = MockGeminiService()
-except Exception as e:
-    logger.warning(f"Using mock service - Configuration failed: {e}")
-    gemini_service = MockGeminiService()
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({
-        'status': 'healthy', 
-        'service': 'llm-service',
-        'port': 5000,
-        'version': '1.0'
-    })
-
-@app.route('/generate', methods=['POST'])
-def generate_response():
+def load_questions(dataset_path="datasets/sample_questions.json", num_questions=50):
+    """Cargar preguntas desde el dataset"""
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-            
-        question = data.get('question', '')
-        if not question:
-            return jsonify({'error': 'Question is required'}), 400
-        
-        logger.info(f"Received question: {question[:50]}...")
-        
-        response = gemini_service.generate_response(question)
-        
-        return jsonify({
-            'question': question,
-            'response': response,
-            'status': 'success'
-        })
-            
-    except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        with open(dataset_path, 'r', encoding='utf-8-sig') as f:  # Cambiar a utf-8-sig
+            questions = json.load(f)
+            print(f"Loaded {len(questions)} questions from {dataset_path}")
+            return questions[:num_questions]
+    except FileNotFoundError:
+        print(f"Dataset file {dataset_path} not found")
+        # Preguntas de ejemplo si no hay dataset
+        sample_questions = [
+            "What is Python?",
+            "What is Docker?",
+            "What is machine learning?",
+            "What are distributed systems?",
+            "How to learn programming?",
+            "What is cloud computing?",
+            "What is an API?",
+            "How to deploy applications?",
+            "What is artificial intelligence?",
+            "What is data science?"
+        ]
+        print("Using sample questions")
+        return sample_questions
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON from {dataset_path}: {e}")
+        # Usar preguntas de ejemplo como fallback
+        sample_questions = [
+            "What is Python?",
+            "What is Docker?",
+            "What is machine learning?"
+        ]
+        print("Using fallback questions due to JSON error")
+        return sample_questions
 
-if __name__ == '__main__':
-    logger.info("Starting LLM Service on port 5000...")
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+def send_query(cache_url, question):
+    """Enviar pregunta al cache service"""
+    try:
+        payload = {"question": question}
+        response = requests.post(
+            f"{cache_url}/query",
+            json=payload,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return True
+        else:
+            print(f"Error: HTTP {response.status_code}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Connection error: {e}")
+        return False
+
+def main():
+    parser = argparse.ArgumentParser(description='Traffic Generator for QA System')
+    parser.add_argument('--distribution', type=str, default='poisson', 
+                       choices=['constant', 'poisson', 'bursty', 'sinusoidal'],
+                       help='Traffic distribution type')
+    parser.add_argument('--rate', type=float, default=2.0, 
+                       help='Requests per second')
+    parser.add_argument('--duration', type=int, default=60,
+                       help='Duration in seconds')
+    parser.add_argument('--dataset', type=str, default='datasets/sample_questions.json',
+                       help='Path to questions dataset')
+    
+    args = parser.parse_args()
+    
+    # Configuración
+    CACHE_URL = os.getenv('CACHE_SERVICE_URL', 'http://cache-service:8000')
+    
+    print("=== Traffic Generator ===")
+    print(f"Distribution: {args.distribution}")
+    print(f"Rate: {args.rate} req/sec")
+    print(f"Duration: {args.duration} seconds")
+    print(f"Cache URL: {CACHE_URL}")
+    
+    # Cargar preguntas
+    questions = load_questions(args.dataset)
+    
+    # Configurar distribución
+    distributions = TrafficDistributions()
+    if args.distribution == 'constant':
+        dist_func = distributions.constant_rate(args.rate)
+    elif args.distribution == 'poisson':
+        dist_func = distributions.poisson_rate(args.rate)
+    elif args.distribution == 'bursty':
+        dist_func = distributions.bursty_traffic(args.rate)
+    elif args.distribution == 'sinusoidal':
+        dist_func = distributions.sinusoidal_rate(args.rate)
+    else:
+        dist_func = distributions.poisson_rate(args.rate)
+    
+    # Generar tráfico
+    start_time = time.time()
+    request_count = 0
+    success_count = 0
+    
+    print("Starting traffic generation...")
+    
+    while time.time() - start_time < args.duration:
+        # Seleccionar pregunta aleatoria
+        question = random.choice(questions)
+        
+        # Enviar query
+        success = send_query(CACHE_URL, question)
+        request_count += 1
+        if success:
+            success_count += 1
+        
+        # Log cada 10 requests
+        if request_count % 10 == 0:
+            success_rate = (success_count / request_count) * 100
+            print(f"Requests: {request_count}, Success: {success_rate:.1f}%")
+        
+        # Esperar según la distribución
+        wait_time = dist_func()
+        time.sleep(wait_time)
+    
+    # Reporte final
+    success_rate = (success_count / request_count) * 100 if request_count > 0 else 0
+    print("=== Traffic Generation Complete ===")
+    print(f"Total requests: {request_count}")
+    print(f"Successful: {success_count}")
+    print(f"Success rate: {success_rate:.1f}%")
+    print(f"Duration: {time.time() - start_time:.1f} seconds")
+
+if __name__ == "__main__":
+    main()

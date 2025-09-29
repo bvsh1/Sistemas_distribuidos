@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Configuracion
 CACHE_POLICY = os.getenv('CACHE_POLICY', 'lru')
 CACHE_SIZE = int(os.getenv('CACHE_SIZE', '1000'))
-LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://llm-service:5000')
+LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://localhost:5000')
 
 # Importar requests con manejo de errores
 try:
