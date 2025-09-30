@@ -7,7 +7,7 @@ import sys
 import os
 from distributions import TrafficDistributions
 
-def load_questions(dataset_path="datasets/yahoo_questions.json", num_questions=50):
+def load_questions(dataset_path="datasets/yahoo_questions.json", num_questions=10000):
     try:
         with open(dataset_path, 'r', encoding='utf-8') as f:
             questions = json.load(f)
@@ -93,7 +93,7 @@ def main():
     
     args = parser.parse_args()
     
-    CACHE_URL = os.getenv('CACHE_SERVICE_URL', 'http://cache-service:8000')
+    CACHE_URL = os.getenv('CACHE_SERVICE_URL', 'http://localhost:8000')
     
     print("=== Traffic Generator with Cache ===")
     print(f"Distribution: {args.distribution}")

@@ -27,14 +27,4 @@ class TrafficDistributions:
             else:
                 return np.random.exponential(1.0 / (avg_rate * 0.2))
         return generator
-
-    @staticmethod
-    def sinusoidal_rate(base_rate: float = 1.0, amplitude: float = 0.5, period: float = 60.0) -> Callable:
-        """Tasa sinusoidal: simula variaciones horarias"""
-        start_time = time.time()
-        def generator():
-            elapsed = time.time() - start_time
-            current_rate = base_rate + amplitude * np.sin(2 * np.pi * elapsed / period)
-            return np.random.exponential(1.0 / current_rate)
-        return generator
     

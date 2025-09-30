@@ -51,7 +51,7 @@ services:
         condition: service_healthy
     restart: "no"
     volumes:
-      - ./datasets:/app/datasets
+    - ./datasets:/app/datasets:ro
     networks:
       - llm-network
     environment:
