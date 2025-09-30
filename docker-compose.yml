@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   llm-service:
     build:
@@ -8,6 +10,14 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    networks:
+      - llm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   cache-service:
     build:
@@ -18,15 +28,35 @@ services:
     env_file:
       - .env
     depends_on:
-      - llm-service
+      llm-service:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - llm-network
+    environment:
+      - LLM_SERVICE_URL=http://llm-service:5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   traffic-generator:
     build:
       context: ./src/traffic-generator
       dockerfile: Dockerfile
     depends_on:
-      - cache-service
-    restart: unless-stopped
+      cache-service:
+        condition: service_healthy
+    restart: "no"
     volumes:
       - ./datasets:/app/datasets
+    networks:
+      - llm-network
+    environment:
+      - CACHE_SERVICE_URL=http://cache-service:8000
+
+networks:
+  llm-network:
+    driver: bridge

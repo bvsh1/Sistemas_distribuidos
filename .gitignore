@@ -1,3 +1,7 @@
 .env
 *.env
 .env.local
+datasets/raw/classes.txt
+datasets/raw/readme.txt
+datasets/raw/test.csv
+datasets/raw/train.csv

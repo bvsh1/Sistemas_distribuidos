@@ -1,9 +1,4 @@
-# datasets/download_with_python.ps1
-Write-Host "Descargando dataset usando Python..." -ForegroundColor Green
-
-# Crear script Python para descargar
-@'
-import os
+﻿import os
 import zipfile
 from kaggle.api.kaggle_api_extended import KaggleApi
 
@@ -35,12 +30,3 @@ def download_dataset():
 
 if __name__ == "__main__":
     download_dataset()
-'@ | Set-Content -Path "datasets\kaggle_download.py" -Encoding UTF8
-
-# Ejecutar el script Python
-python datasets\kaggle_download.py
-
-# Procesar
-if (Test-Path "datasets\process_yahoo_answers.py") {
-    python datasets\process_yahoo_answers.py
-}
