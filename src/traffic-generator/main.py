@@ -7,47 +7,39 @@ import sys
 import os
 from distributions import TrafficDistributions
 
-def load_questions(dataset_path="datasets/sample_questions.json", num_questions=50):
-    """Cargar preguntas desde el dataset"""
+def load_questions(dataset_path="datasets/yahoo_questions.json", num_questions=50):
     try:
         with open(dataset_path, 'r', encoding='utf-8') as f:
             questions = json.load(f)
             print(f"Loaded {len(questions)} questions from {dataset_path}")
             
-            # Si es una lista de objetos, extraer el texto
-            if questions and isinstance(questions[0], dict):
+            if questions and isinstance(questions[0], str):
+                return questions[:num_questions]
+            elif questions and isinstance(questions[0], dict):
                 if 'question' in questions[0]:
                     questions = [q['question'] for q in questions]
                 elif 'text' in questions[0]:
                     questions = [q['text'] for q in questions]
-            
-            return questions[:num_questions]
+                return questions[:num_questions]
+            else:
+                raise ValueError("Formato de dataset no reconocido")
             
     except FileNotFoundError:
         print(f"Dataset file {dataset_path} not found")
-        # Preguntas de ejemplo si no hay dataset
-        sample_questions = [
-            "What is Python?",
-            "What is Docker?",
-            "What is machine learning?",
-            "What are distributed systems?",
-            "How to learn programming?",
-            "What is cloud computing?",
-            "What is an API?",
-            "How to deploy applications?",
-            "What is artificial intelligence?",
-            "What is data science?"
-        ]
-        print("Using sample questions")
-        return sample_questions
+        return get_fallback_questions()[:num_questions]
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON from {dataset_path}: {e}")
-        sample_questions = ["What is Python?", "What is Docker?", "What is machine learning?"]
-        print("Using fallback questions due to JSON error")
-        return sample_questions
+        return get_fallback_questions()[:num_questions]
+
+def get_fallback_questions():
+    return [
+        "What is Python?", "What is Docker?", "What is machine learning?",
+        "What are distributed systems?", "How to learn programming?",
+        "What is cloud computing?", "What is an API?", "How to deploy applications?",
+        "What is artificial intelligence?", "What is data science?"
+    ]
 
 def send_query(cache_url, question):
-    """Enviar pregunta al cache service"""
     try:
         payload = {"question": question}
         response = requests.post(
@@ -59,59 +51,31 @@ def send_query(cache_url, question):
         if response.status_code == 200:
             data = response.json()
             source = data.get('source', 'unknown')
-            response_preview = data.get('response', '')[:50] + '...' if len(data.get('response', '')) > 50 else data.get('response', '')
-            print(f"  Response from {source}: {response_preview}")
-            return True
+            cache_hit = data.get('cache_hit', False)
+            response_preview = data.get('response', '')[:80] + '...' if len(data.get('response', '')) > 80 else data.get('response', '')
+            
+            cache_status = "HIT" if cache_hit else "MISS"
+            color_code = "\033[92m" if cache_hit else "\033[93m"  # Verde para HIT, Amarillo para MISS
+            reset_code = "\033[0m"
+            
+            print(f"  [{color_code}{cache_status}{reset_code}] from {source}: {response_preview}")
+            return True, cache_hit
         else:
             print(f"  Error: HTTP {response.status_code} - {response.text}")
-            return False
+            return False, False
             
     except requests.exceptions.RequestException as e:
         print(f"  Connection error: {e}")
-        return False
-def load_questions(dataset_path="datasets/yahoo_questions.json", num_questions=50):
-    """Cargar preguntas desde el dataset de Yahoo Answers"""
-    try:
-        with open(dataset_path, 'r', encoding='utf-8') as f:
-            questions = json.load(f)
-            print(f"Loaded {len(questions)} questions from {dataset_path}")
-            
-            # Si es una lista de strings, usarla directamente
-            if questions and isinstance(questions[0], str):
-                return questions[:num_questions]
-            
-            # Si es una lista de objetos, extraer el texto
-            elif questions and isinstance(questions[0], dict):
-                if 'question' in questions[0]:
-                    questions = [q['question'] for q in questions]
-                elif 'text' in questions[0]:
-                    questions = [q['text'] for q in questions]
-                elif 'title' in questions[0]:
-                    questions = [q['title'] for q in questions]
-                elif 'content' in questions[0]:
-                    questions = [q['content'] for q in questions]
-                
-                return questions[:num_questions]
-            else:
-                raise ValueError("Formato de dataset no reconocido")
-            
-    except FileNotFoundError:
-        print(f"Dataset file {dataset_path} not found, trying sample dataset...")
-        # Intentar con dataset de muestra
-        return load_questions("datasets/sample_questions.json", num_questions)
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from {dataset_path}: {e}")
-        print("Using fallback questions...")
-        return get_fallback_questions()[:num_questions]
+        return False, False
 
-def get_fallback_questions():
-    """Preguntas de respaldo si todo falla"""
-    return [
-        "What is Python?", "What is Docker?", "What is machine learning?",
-        "What are distributed systems?", "How to learn programming?",
-        "What is cloud computing?", "What is an API?", "How to deploy applications?",
-        "What is artificial intelligence?", "What is data science?"
-    ]
+def get_cache_stats(cache_url):
+    try:
+        response = requests.get(f"{cache_url}/cache/stats", timeout=5)
+        if response.status_code == 200:
+            return response.json()
+    except:
+        pass
+    return None
 
 def main():
     parser = argparse.ArgumentParser(description='Traffic Generator for QA System')
@@ -122,17 +86,16 @@ def main():
                        help='Requests per second')
     parser.add_argument('--duration', type=int, default=60,
                        help='Duration in seconds')
-    parser.add_argument('--dataset', type=str, default='datasets/sample_questions.json',
+    parser.add_argument('--dataset', type=str, default='datasets/yahoo_questions.json',
                        help='Path to questions dataset')
     parser.add_argument('--max-questions', type=int, default=50,
                        help='Maximum number of questions to use')
     
     args = parser.parse_args()
     
-    # Configuración
     CACHE_URL = os.getenv('CACHE_SERVICE_URL', 'http://cache-service:8000')
     
-    print("=== Traffic Generator ===")
+    print("=== Traffic Generator with Cache ===")
     print(f"Distribution: {args.distribution}")
     print(f"Rate: {args.rate} req/sec")
     print(f"Duration: {args.duration} seconds")
@@ -147,49 +110,64 @@ def main():
     distributions = TrafficDistributions()
     if args.distribution == 'constant':
         dist_func = distributions.constant_rate(args.rate)
-        print("Using constant distribution")
     elif args.distribution == 'poisson':
         dist_func = distributions.poisson_rate(args.rate)
-        print("Using Poisson distribution")
     elif args.distribution == 'bursty':
         dist_func = distributions.bursty_traffic(args.rate, burst_factor=5.0)
-        print("Using bursty distribution")
     elif args.distribution == 'sinusoidal':
         dist_func = distributions.sinusoidal_rate(args.rate, amplitude=0.5, period=60.0)
-        print("Using sinusoidal distribution")
     else:
         dist_func = distributions.poisson_rate(args.rate)
-        print("Defaulting to Poisson distribution")
     
-    # Generar tráfico
+    # Estadísticas
     start_time = time.time()
     request_count = 0
     success_count = 0
+    cache_hits = 0
+    cache_misses = 0
     
     print("Starting traffic generation...")
+    print("Cache HIT = \033[92mGREEN\033[0m, Cache MISS = \033[93mYELLOW\033[0m")
     
     try:
         while time.time() - start_time < args.duration:
-            # Seleccionar pregunta aleatoria
-            question = random.choice(questions)
+            # Seleccionar pregunta (con algo de repetición para probar cache)
+            if random.random() < 0.3 and request_count > 10:  # 30% de repetir preguntas anteriores
+                question = random.choice(questions[:min(10, len(questions))])
+            else:
+                question = random.choice(questions)
             
             print(f"Request {request_count + 1}: {question}")
             
             # Enviar query
-            success = send_query(CACHE_URL, question)
+            success, cache_hit = send_query(CACHE_URL, question)
             request_count += 1
             if success:
                 success_count += 1
+                if cache_hit:
+                    cache_hits += 1
+                else:
+                    cache_misses += 1
             
-            # Log cada 5 requests
-            if request_count % 5 == 0:
+            # Mostrar estadísticas cada 10 requests
+            if request_count % 10 == 0:
                 success_rate = (success_count / request_count) * 100
+                cache_hit_rate = (cache_hits / (cache_hits + cache_misses)) * 100 if (cache_hits + cache_misses) > 0 else 0
                 elapsed = time.time() - start_time
-                print(f"Progress: {request_count} requests, {success_rate:.1f}% success, {elapsed:.1f}s elapsed")
+                
+                print(f"\n--- Progress Report ---")
+                print(f"Requests: {request_count}, Success: {success_rate:.1f}%")
+                print(f"Cache Hits: {cache_hits}, Misses: {cache_misses}, Hit Rate: {cache_hit_rate:.1f}%")
+                print(f"Elapsed: {elapsed:.1f}s")
+                
+                # Mostrar estadísticas del servidor cache
+                stats = get_cache_stats(CACHE_URL)
+                if stats:
+                    print(f"Server Cache - Hits: {stats['hits']}, Misses: {stats['misses']}, Hit Rate: {stats['hit_rate']*100:.1f}%")
+                print("-----------------------\n")
             
             # Esperar según la distribución
             wait_time = dist_func()
-            print(f"Waiting {wait_time:.2f}s...")
             time.sleep(wait_time)
     
     except KeyboardInterrupt:
@@ -197,15 +175,28 @@ def main():
     
     # Reporte final
     success_rate = (success_count / request_count) * 100 if request_count > 0 else 0
+    cache_hit_rate = (cache_hits / (cache_hits + cache_misses)) * 100 if (cache_hits + cache_misses) > 0 else 0
     actual_duration = time.time() - start_time
     actual_rate = request_count / actual_duration if actual_duration > 0 else 0
     
-    print("=== Traffic Generation Complete ===")
+    print("\n=== Traffic Generation Complete ===")
     print(f"Total requests: {request_count}")
-    print(f"Successful: {success_count}")
-    print(f"Success rate: {success_rate:.1f}%")
+    print(f"Successful: {success_count} ({success_rate:.1f}%)")
+    print(f"Cache Hits: {cache_hits}")
+    print(f"Cache Misses: {cache_misses}")
+    print(f"Cache Hit Rate: {cache_hit_rate:.1f}%")
     print(f"Actual duration: {actual_duration:.1f} seconds")
     print(f"Actual rate: {actual_rate:.2f} req/sec")
+    
+    # Estadísticas finales del servidor
+    stats = get_cache_stats(CACHE_URL)
+    if stats:
+        print(f"\n=== Server Cache Statistics ===")
+        print(f"Policy: {stats['policy']}")
+        print(f"Size: {stats['current_size']}/{stats['max_size']}")
+        print(f"Total Hits: {stats['hits']}")
+        print(f"Total Misses: {stats['misses']}")
+        print(f"Total Hit Rate: {stats['hit_rate']*100:.2f}%")
 
 if __name__ == "__main__":
     main()
