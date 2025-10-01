@@ -1,4 +1,4 @@
-# docker-compose.yml (VERSIÓN SIMPLIFICADA)
+# docker-compose.yml (VERSIÓN CORREGIDA)
 version: '3.8'
 
 services:
@@ -69,6 +69,23 @@ services:
     environment:
       - CACHE_SERVICE_URL=http://cache-service:8000
       - LLM_SERVICE_URL=http://llm-service:5000
+    restart: unless-stopped
+
+  # ✅ NUEVO SERVICIO - DENTRO DEL BLOQUE SERVICES
+  storage-service:
+    build:
+      context: ./src/storage
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    networks:
+      - llm-network
+    volumes:
+      - ./storage_data:/app/storage
+    environment:
+      - STORAGE_PORT=8081
     restart: unless-stopped
 
 networks:

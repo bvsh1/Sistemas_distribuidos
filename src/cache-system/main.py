@@ -1,4 +1,4 @@
-﻿# src/cache-system/main.py
+﻿# src/cache-system/main.py (VERSIÓN CON STORAGE)
 from flask import Flask, request, jsonify
 import requests
 import logging
@@ -22,6 +22,7 @@ app = Flask(__name__)
 
 # Configuración
 LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://llm-service:5000')
+STORAGE_SERVICE_URL = os.getenv('STORAGE_SERVICE_URL', 'http://storage-service:8081')
 CACHE_SIZE = int(os.getenv('CACHE_SIZE', 100000))
 CACHE_POLICY = os.getenv('CACHE_POLICY', 'LRU')
 
@@ -106,18 +107,73 @@ def evaluate_response_quality(question, llm_response):
         'quality_grade': get_quality_grade(evaluation['comprehensive_score'])
     }
 
+def save_to_storage(question, expected_answer, llm_answer, quality_metrics, ask_count=1):
+    """Guardar registro en el sistema de almacenamiento"""
+    try:
+        storage_data = {
+            'question': question,
+            'expected_answer': expected_answer,
+            'llm_answer': llm_answer,
+            'quality_metrics': quality_metrics,
+            'ask_count': ask_count
+        }
+        
+        response = requests.post(
+            f"{STORAGE_SERVICE_URL}/storage/save",
+            json=storage_data,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            logger.info(f"📁 Registro guardado en storage: {question[:50]}...")
+            return True
+        else:
+            logger.error(f"❌ Error guardando en storage: {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Error conectando a storage service: {e}")
+        return False
+
+def get_from_storage(question):
+    """Obtener registro del sistema de almacenamiento"""
+    try:
+        response = requests.get(
+            f"{STORAGE_SERVICE_URL}/storage/record/{requests.utils.quote(question)}",
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error obteniendo de storage: {e}")
+        return None
+
 @app.route('/health', methods=['GET'])
 def health_check():
     logger.info("Health check requested")
     try:
         stats = cache.get_stats()
+        
+        # Verificar conexión a storage
+        storage_status = "unknown"
+        try:
+            storage_response = requests.get(f"{STORAGE_SERVICE_URL}/health", timeout=5)
+            storage_status = "connected" if storage_response.status_code == 200 else "disconnected"
+        except:
+            storage_status = "disconnected"
+        
         return jsonify({
             'status': 'healthy',
             'service': 'cache-service',
             'cache_size': CACHE_SIZE,
             'cache_policy': CACHE_POLICY,
             'cache_stats': stats,
-            'evaluation_dataset_size': len(QA_DATASET)
+            'evaluation_dataset_size': len(QA_DATASET),
+            'storage_service': storage_status
         })
     except Exception as e:
         logger.error(f"Health check error: {e}")
@@ -144,6 +200,24 @@ def query():
         cached_response = cache.get(question)
         if cached_response:
             logger.info(f"Cache HIT for question: {question}")
+            
+            # ✅ NUEVO: Actualizar conteo en storage si existe
+            if question in QA_DATASET:
+                try:
+                    storage_record = get_from_storage(question)
+                    if storage_record:
+                        # Actualizar conteo
+                        save_to_storage(
+                            question=question,
+                            expected_answer=QA_DATASET[question]['expected_answer'],
+                            llm_answer=cached_response,
+                            quality_metrics={'comprehensive_score': storage_record.get('quality_score', 0)},
+                            ask_count=storage_record.get('ask_count', 0) + 1
+                        )
+                        logger.info(f"📊 Conteo actualizado en storage: {question[:50]}...")
+                except Exception as e:
+                    logger.error(f"Error actualizando conteo en storage: {e}")
+            
             return jsonify({
                 'source': 'cache',
                 'response': cached_response,
@@ -168,6 +242,16 @@ def query():
                 
                 # Evaluar calidad de la respuesta (solo si es miss)
                 quality_evaluation = evaluate_response_quality(question, response_text)
+                
+                # ✅ NUEVO: Guardar en storage si tenemos datos de evaluación
+                if quality_evaluation['evaluated']:
+                    save_to_storage(
+                        question=question,
+                        expected_answer=quality_evaluation['expected_answer'],
+                        llm_answer=response_text,
+                        quality_metrics=quality_evaluation['evaluation_metrics'],
+                        ask_count=1
+                    )
                 
                 # Guardar en cache
                 cache.put(question, response_text)
@@ -207,6 +291,58 @@ def query():
         logger.error(f"Error in /query: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/storage/record/<question>', methods=['GET'])
+def get_storage_record(question):
+    """Endpoint para obtener registro específico del storage"""
+    try:
+        record = get_from_storage(question)
+        if record:
+            return jsonify(record)
+        else:
+            return jsonify({'error': 'Record not found in storage'}), 404
+    except Exception as e:
+        logger.error(f"Error getting storage record: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/storage/records', methods=['GET'])
+def get_storage_records():
+    """Endpoint para obtener todos los registros del storage"""
+    try:
+        limit = request.args.get('limit', default=10000, type=int)
+        response = requests.get(
+            f"{STORAGE_SERVICE_URL}/storage/records?limit={limit}",
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Failed to get storage records'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error getting storage records: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/storage/stats', methods=['GET'])
+def get_storage_stats():
+    """Endpoint para obtener estadísticas del storage"""
+    try:
+        response = requests.get(
+            f"{STORAGE_SERVICE_URL}/storage/stats",
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            return jsonify({'error': 'Failed to get storage stats'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error getting storage stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ... (Mantener los otros endpoints existentes sin cambios)
+
 @app.route('/evaluation/stats', methods=['GET'])
 def evaluation_stats():
     """Endpoint para obtener estadísticas de evaluación"""
@@ -214,9 +350,6 @@ def evaluation_stats():
         # Calcular algunas estadísticas básicas
         evaluated_count = 0
         quality_scores = []
-        
-        # En una implementación real, aquí almacenarías las evaluaciones históricas
-        # Por ahora retornamos estadísticas básicas del dataset
         
         return jsonify({
             'evaluation_dataset_size': len(QA_DATASET),
@@ -232,10 +365,7 @@ def evaluation_stats():
 def evaluation_results():
     """Endpoint para obtener resultados de evaluación detallados"""
     try:
-        # En una implementación completa, aquí retornarías evaluaciones almacenadas
         sample_evaluations = []
-        
-        # Ejemplo de estructura de datos de evaluación
         return jsonify({
             'total_evaluations': len(sample_evaluations),
             'evaluations': sample_evaluations,
@@ -310,6 +440,7 @@ if __name__ == '__main__':
     logger.info(f"Starting Cache Service on {host}:{port}")
     logger.info(f"Cache policy: {CACHE_POLICY}, Size: {CACHE_SIZE}")
     logger.info(f"LLM Service URL: {LLM_SERVICE_URL}")
+    logger.info(f"Storage Service URL: {STORAGE_SERVICE_URL}")
     logger.info(f"Quality evaluation: {'ENABLED' if QA_DATASET else 'DISABLED'}")
     
     app.run(host=host, port=port, debug=False)
