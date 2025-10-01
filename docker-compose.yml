@@ -22,7 +22,7 @@ services:
   cache-service:
     build:
       context: ./src/cache-system
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     ports:
       - "8000:8000"
     env_file:
@@ -45,7 +45,7 @@ services:
   traffic-generator:
     build:
       context: ./src/traffic-generator
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     depends_on:
       cache-service:
         condition: service_healthy

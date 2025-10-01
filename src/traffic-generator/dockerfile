@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar todos los archivos .py
-COPY *.py .
+COPY *.py ./
 
 RUN mkdir -p datasets
 

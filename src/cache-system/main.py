@@ -22,7 +22,7 @@ app = Flask(__name__)
 
 # Configuración
 LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://llm-service:5000')
-CACHE_SIZE = int(os.getenv('CACHE_SIZE', 100))
+CACHE_SIZE = int(os.getenv('CACHE_SIZE', 100000))
 CACHE_POLICY = os.getenv('CACHE_POLICY', 'LRU')
 
 # Inicializar cache y evaluador
