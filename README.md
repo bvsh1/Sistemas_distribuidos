@@ -45,3 +45,38 @@ while true; do
     echo "Ultima actualizacion: $(date +'%H:%M:%S')"
     sleep 10
 done
+
+
+# Parar y eliminar TODO
+docker-compose down --remove-orphans
+
+# Eliminar contenedores huérfanos
+docker container prune -f
+
+# Eliminar imágenes no utilizadas
+docker image prune -f
+
+# Limpieza del sistema Docker
+docker system prune -f
+
+# Verificar que no quede nada del proyecto
+docker ps -a | grep sistemas_distribuidos
+docker images | grep sistemas_distribuidos
+
+
+
+# Reconstruir TODOS los servicios sin cache
+docker-compose build --no-cache
+
+# Levantar servicios en este orden:
+docker-compose up -d llm-service
+sleep 10
+
+docker-compose up -d cache-service  
+sleep 10
+
+docker-compose up -d scoring-service
+sleep 10
+
+# Finalmente el traffic-generator (opcional)
+docker-compose up -d traffic-generator
