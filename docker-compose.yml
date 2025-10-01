@@ -1,3 +1,4 @@
+# docker-compose.yml (VERSIÓN SIMPLIFICADA)
 version: '3.8'
 
 services:
@@ -22,7 +23,7 @@ services:
   cache-service:
     build:
       context: ./src/cache-system
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file:
@@ -36,7 +37,7 @@ services:
     environment:
       - LLM_SERVICE_URL=http://llm-service:5000
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; r = requests.get('http://localhost:8000/health'); exit(0 if r.status_code == 200 else 1)"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -45,17 +46,30 @@ services:
   traffic-generator:
     build:
       context: ./src/traffic-generator
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     depends_on:
       cache-service:
         condition: service_healthy
     restart: "no"
-    volumes:
-    - ./datasets:/app/datasets:ro
     networks:
       - llm-network
     environment:
       - CACHE_SERVICE_URL=http://cache-service:8000
+
+  scoring-service:
+    build:
+      context: ./src/scoring
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    networks:
+      - llm-network
+    environment:
+      - CACHE_SERVICE_URL=http://cache-service:8000
+      - LLM_SERVICE_URL=http://llm-service:5000
+    restart: unless-stopped
 
 networks:
   llm-network:

@@ -5,6 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+from sentence_transformers import SentenceTransformer, util
 import re
 import logging
 
@@ -14,93 +15,58 @@ class ScoreEvaluator:
         self.logger = logging.getLogger(__name__)
         self.spanish_stopwords = set()
         self.vectorizer = TfidfVectorizer()
+        
+        # Modelo de embeddings para similitud semántica
+        try:
+            self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+            self.embedding_available = True
+            self.logger.info("Modelo de embeddings cargado correctamente")
+        except Exception as e:
+            self.logger.warning(f"No se pudo cargar el modelo de embeddings: {e}")
+            self.embedding_available = False
+        
         self.setup_nltk()
     
     def setup_nltk(self):
-        """Configura los recursos de NLTK con manejo robusto de errores"""
+        """Configura los recursos de NLTK"""
         try:
-            # Intentar descargar recursos si no están disponibles
-            try:
-                nltk.data.find('tokenizers/punkt')
-            except LookupError:
-                self.logger.info("Descargando recursos punkt...")
-                nltk.download('punkt', quiet=True)
-            
-            try:
-                nltk.data.find('corpora/stopwords')
-            except LookupError:
-                self.logger.info("Descargando recursos stopwords...")
-                nltk.download('stopwords', quiet=True)
-            
-            # Configurar stopwords en español
-            self.spanish_stopwords = set(stopwords.words('spanish'))
-            self.vectorizer = TfidfVectorizer(stop_words=list(self.spanish_stopwords))
-            
-            self.logger.info("Recursos NLTK configurados correctamente")
-            
-        except Exception as e:
-            self.logger.warning(f"Error configurando NLTK, usando modo simple: {e}")
-            self.fallback_mode = True
-    
-    def simple_tokenize(self, text):
-        """Tokenización simple sin NLTK como fallback"""
-        if not text or not isinstance(text, str):
-            return []
-        
-        # Limpieza básica
-        text = text.lower()
-        text = re.sub(r'[^\w\s]', '', text)
-        
-        # Tokenización por espacios
-        tokens = text.split()
-        
-        # Filtrar stopwords básicas
-        basic_stopwords = {'de', 'la', 'que', 'el', 'en', 'y', 'a', 'los', 'del', 'se', 'las', 'por', 'un', 'para', 'con', 'no', 'una', 'su', 'al', 'lo', 'como', 'más', 'pero', 'sus', 'le', 'ya', 'o', 'este', 'sí', 'porque', 'esta', 'entre', 'cuando', 'muy', 'sin', 'sobre', 'también', 'me', 'hasta', 'hay', 'donde', 'quien', 'desde', 'todo', 'nos', 'durante', 'todos', 'uno', 'les', 'ni', 'contra', 'otros', 'ese', 'eso', 'ante', 'ellos', 'e', 'esto', 'mí', 'antes', 'algunos', 'qué', 'unos', 'yo', 'otro', 'otras', 'otra', 'él', 'tanto', 'esa', 'estos', 'mucho', 'quienes', 'nada', 'muchos', 'cual', 'poco', 'ella', 'estar', 'estas', 'algunas', 'algo', 'nosotros', 'mi', 'mis', 'tú', 'te', 'ti', 'tu', 'tus', 'ellas', 'nosotras', 'vosotros', 'vosotras', 'os', 'mío', 'mía', 'míos', 'mías', 'tuyo', 'tuya', 'tuyos', 'tuyas', 'suyo', 'suya', 'suyos', 'suyas', 'nuestro', 'nuestra', 'nuestros', 'nuestras', 'vuestro', 'vuestra', 'vuestros', 'vuestras', 'esos', 'esas', 'estoy', 'estás', 'está', 'estamos', 'estáis', 'están', 'esté', 'estés', 'estemos', 'estéis', 'estén', 'estaré', 'estarás', 'estará', 'estaremos', 'estaréis', 'estarán', 'estaría', 'estarías', 'estaríamos', 'estaríais', 'estarían', 'estaba', 'estabas', 'estábamos', 'estabais', 'estaban', 'estuve', 'estuviste', 'estuvo', 'estuvimos', 'estuvisteis', 'estuvieron', 'estuviera', 'estuvieras', 'estuviéramos', 'estuvierais', 'estuvieran', 'estuviese', 'estuvieses', 'estuviésemos', 'estuvieseis', 'estuviesen', 'estando', 'estado', 'estada', 'estados', 'estadas', 'estad', 'he', 'has', 'ha', 'hemos', 'habéis', 'han', 'haya', 'hayas', 'hayamos', 'hayáis', 'hayan', 'habré', 'habrás', 'habrá', 'habremos', 'habréis', 'habrán', 'habría', 'habrías', 'habríamos', 'habríais', 'habrían', 'había', 'habías', 'habíamos', 'habíais', 'habían', 'hube', 'hubiste', 'hubo', 'hubimos', 'hubisteis', 'hubieron', 'hubiera', 'hubieras', 'hubiéramos', 'hubierais', 'hubieran', 'hubiese', 'hubieses', 'hubiésemos', 'hubieseis', 'hubiesen', 'habiendo', 'habido', 'habida', 'habidos', 'habidas', 'soy', 'eres', 'es', 'somos', 'sois', 'son', 'sea', 'seas', 'seamos', 'seáis', 'sean', 'seré', 'serás', 'será', 'seremos', 'seréis', 'serán', 'sería', 'serías', 'seríamos', 'seríais', 'serían', 'era', 'eras', 'éramos', 'erais', 'eran', 'fui', 'fuiste', 'fue', 'fuimos', 'fuisteis', 'fueron', 'fuera', 'fueras', 'fuéramos', 'fuerais', 'fueran', 'fuese', 'fueses', 'fuésemos', 'fueseis', 'fuesen', 'sintiendo', 'sentido', 'sentida', 'sentidos', 'sentidas', 'siente', 'sentid', 'tengo', 'tienes', 'tiene', 'tenemos', 'tenéis', 'tienen', 'tenga', 'tengas', 'tengamos', 'tengáis', 'tengan', 'tendré', 'tendrás', 'tendrá', 'tendremos', 'tendréis', 'tendrán', 'tendría', 'tendrías', 'tendríamos', 'tendríais', 'tendrían', 'tenía', 'tenías', 'teníamos', 'teníais', 'tenían', 'tuve', 'tuviste', 'tuvo', 'tuvimos', 'tuvisteis', 'tuvieron', 'tuviera', 'tuvieras', 'tuviéramos', 'tuvierais', 'tuvieran', 'tuviese', 'tuvieses', 'tuviésemos', 'tuvieseis', 'tuviesen', 'teniendo', 'tenido', 'tenida', 'tenidos', 'tenidas', 'tened'}
-        
-        tokens = [token for token in tokens if token not in basic_stopwords and len(token) > 2]
-        
-        return tokens
-    
-    def preprocess_text(self, text):
-        """Preprocesa el texto para análisis con fallback"""
-        if not text or not isinstance(text, str):
-            return ""
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            nltk.download('punkt', quiet=True)
         
         try:
-            # Convertir a minúsculas y eliminar caracteres especiales
-            text = text.lower()
-            text = re.sub(r'[^\w\s]', '', text)
-            
-            # Intentar tokenización con NLTK, fallback a simple
-            try:
-                tokens = word_tokenize(text)
-                tokens = [token for token in tokens if token not in self.spanish_stopwords and len(token) > 2]
-            except:
-                tokens = self.simple_tokenize(text)
-            
-            return ' '.join(tokens)
-            
+            nltk.data.find('corpora/stopwords')
+        except LookupError:
+            nltk.download('stopwords', quiet=True)
+        
+        self.spanish_stopwords = set(stopwords.words('spanish'))
+        self.vectorizer = TfidfVectorizer(stop_words=list(self.spanish_stopwords))
+    
+    def semantic_similarity(self, text1, text2):
+        """Calcula similitud semántica usando embeddings (más preciso)"""
+        if not self.embedding_available:
+            return self.cosine_similarity_score(text1, text2)
+        
+        try:
+            emb1 = self.embedding_model.encode(text1, convert_to_tensor=True)
+            emb2 = self.embedding_model.encode(text2, convert_to_tensor=True)
+            score = util.cos_sim(emb1, emb2)
+            return float(score.item())
         except Exception as e:
-            self.logger.error(f"Error en preprocesamiento, usando texto limpio: {e}")
-            # Fallback: solo limpieza básica
-            text = text.lower()
-            text = re.sub(r'[^\w\s]', '', text)
-            return text
+            self.logger.error(f"Error en similitud semántica: {e}")
+            return self.cosine_similarity_score(text1, text2)
     
     def cosine_similarity_score(self, text1, text2):
         """Calcula similitud coseno entre dos textos"""
         try:
-            # Preprocesar textos
             text1_clean = self.preprocess_text(text1)
             text2_clean = self.preprocess_text(text2)
             
             if not text1_clean or not text2_clean:
                 return 0.0
             
-            # Vectorizar y calcular similitud
             tfidf_matrix = self.vectorizer.fit_transform([text1_clean, text2_clean])
             similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])
-            
             return float(similarity[0][0])
         except Exception as e:
             self.logger.error(f"Error en cosine similarity: {e}")
@@ -141,31 +107,83 @@ class ScoreEvaluator:
             self.logger.error(f"Error en length ratio: {e}")
             return 0.0
     
+    def keyword_overlap(self, text1, text2):
+        """Calcula el overlap de palabras clave importantes"""
+        try:
+            words1 = set(self.preprocess_text(text1).split())
+            words2 = set(self.preprocess_text(text2).split())
+            
+            if not words1 or not words2:
+                return 0.0
+            
+            overlap = len(words1.intersection(words2))
+            return overlap / len(words1.union(words2))
+        except Exception as e:
+            self.logger.error(f"Error en keyword overlap: {e}")
+            return 0.0
+    
+    def preprocess_text(self, text):
+        """Preprocesa el texto para análisis"""
+        if not text or not isinstance(text, str):
+            return ""
+        
+        text = text.lower()
+        text = re.sub(r'[^\w\s]', '', text)
+        
+        try:
+            tokens = word_tokenize(text)
+            tokens = [token for token in tokens if token not in self.spanish_stopwords and len(token) > 2]
+        except:
+            tokens = text.split()
+            tokens = [token for token in tokens if token not in self.spanish_stopwords and len(token) > 2]
+        
+        return ' '.join(tokens)
+    
     def calculate_comprehensive_score(self, original_answer, llm_answer):
         """Calcula un score compuesto considerando múltiples métricas"""
         try:
-            cosine_score = self.cosine_similarity_score(original_answer, llm_answer)
+            # Métricas principales
+            semantic_score = self.semantic_similarity(original_answer, llm_answer)
             jaccard_score = self.jaccard_similarity(original_answer, llm_answer)
             length_score = self.length_ratio_score(original_answer, llm_answer)
+            keyword_score = self.keyword_overlap(original_answer, llm_answer)
             
             # Score compuesto (ponderado)
             comprehensive_score = (
-                0.6 * cosine_score +  # Mayor peso a similitud semántica
-                0.3 * jaccard_score + # Peso medio a overlap léxico
-                0.1 * length_score    # Peso menor a proporción de longitud
+                0.5 * semantic_score +   # Mayor peso a similitud semántica
+                0.2 * jaccard_score +    # Peso medio a overlap léxico
+                0.15 * length_score +    # Peso a proporción de longitud
+                0.15 * keyword_score     # Peso a palabras clave
             )
             
             return {
                 'comprehensive_score': round(comprehensive_score, 4),
-                'cosine_similarity': round(cosine_score, 4),
+                'semantic_similarity': round(semantic_score, 4),
                 'jaccard_similarity': round(jaccard_score, 4),
-                'length_ratio': round(length_score, 4)
+                'length_ratio': round(length_score, 4),
+                'keyword_overlap': round(keyword_score, 4),
+                'quality_grade': self.get_quality_grade(comprehensive_score)
             }
         except Exception as e:
             self.logger.error(f"Error calculando score compuesto: {e}")
             return {
                 'comprehensive_score': 0.0,
-                'cosine_similarity': 0.0,
+                'semantic_similarity': 0.0,
                 'jaccard_similarity': 0.0,
-                'length_ratio': 0.0
+                'length_ratio': 0.0,
+                'keyword_overlap': 0.0,
+                'quality_grade': 'Very Poor'
             }
+    
+    def get_quality_grade(self, score):
+        """Convierte score numérico a calificación cualitativa"""
+        if score >= 0.8:
+            return 'Excellent'
+        elif score >= 0.6:
+            return 'Good'
+        elif score >= 0.4:
+            return 'Fair'
+        elif score >= 0.2:
+            return 'Poor'
+        else:
+            return 'Very Poor'
