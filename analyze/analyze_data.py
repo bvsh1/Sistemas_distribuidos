@@ -48,12 +48,12 @@ class DataAnalyzer:
         print("=== ANÁLISIS DE MÉTRICAS TEMPORALES ===")
         
         # Estadísticas básicas
-        print(f"📈 Período de análisis: {len(metrics_df)} puntos")
-        print(f"🎯 Hit Rate promedio: {metrics_df['hit_rate'].mean():.3f}")
-        print(f"🎯 Hit Rate máximo: {metrics_df['hit_rate'].max():.3f}")
-        print(f"🎯 Hit Rate mínimo: {metrics_df['hit_rate'].min():.3f}")
-        print(f"📊 Total de requests: {metrics_df['total_requests'].iloc[-1]:,}")
-        print(f"💾 Uso máximo del cache: {metrics_df['cache_size'].max()}/{metrics_df['max_cache_size'].iloc[0]}")
+        print(f"Período de análisis: {len(metrics_df)} puntos")
+        print(f"Hit Rate promedio: {metrics_df['hit_rate'].mean():.3f}")
+        print(f"Hit Rate máximo: {metrics_df['hit_rate'].max():.3f}")
+        print(f"Hit Rate mínimo: {metrics_df['hit_rate'].min():.3f}")
+        print(f"Total de requests: {metrics_df['total_requests'].iloc[-1]:,}")
+        print(f"Uso máximo del cache: {metrics_df['cache_size'].max()}/{metrics_df['max_cache_size'].iloc[0]}")
         
         # Tendencias
         metrics_df['time_minutes'] = (metrics_df['timestamp'] - metrics_df['timestamp'].min()).dt.total_seconds() / 60
@@ -67,44 +67,44 @@ class DataAnalyzer:
         cache_hits = perf_df[perf_df['cache_hit'] == True]
         cache_misses = perf_df[perf_df['cache_hit'] == False]
         
-        print(f"🔍 Total de queries testeadas: {len(perf_df)}")
-        print(f"✅ Cache hits: {len(cache_hits)} ({len(cache_hits)/len(perf_df)*100:.1f}%)")
-        print(f"❌ Cache misses: {len(cache_misses)} ({len(cache_misses)/len(perf_df)*100:.1f}%)")
+        print(f"Total de queries testeadas: {len(perf_df)}")
+        print(f"Cache hits: {len(cache_hits)} ({len(cache_hits)/len(perf_df)*100:.1f}%)")
+        print(f"Cache misses: {len(cache_misses)} ({len(cache_misses)/len(perf_df)*100:.1f}%)")
         
         if len(cache_hits) > 0:
-            print(f"⚡ Tiempo respuesta cache hits: {cache_hits['response_time'].mean():.3f}s")
+            print(f"Tiempo respuesta cache hits: {cache_hits['response_time'].mean():.3f}s")
         if len(cache_misses) > 0:
-            print(f"⚡ Tiempo respuesta cache misses: {cache_misses['response_time'].mean():.3f}s")
+            print(f"Tiempo respuesta cache misses: {cache_misses['response_time'].mean():.3f}s")
         
         # Mejora de performance
         if len(cache_hits) > 0 and len(cache_misses) > 0:
             improvement = (cache_misses['response_time'].mean() - cache_hits['response_time'].mean()) / cache_misses['response_time'].mean() * 100
-            print(f"🚀 Mejora con cache: {improvement:.1f}% más rápido")
+            print(f"Mejora con cache: {improvement:.1f}% más rápido")
         
         return perf_df
     
     def analyze_cache_items(self, cache_items):
         """Analizar items del cache"""
         if not cache_items or cache_items['total_items'] == 0:
-            print("\n💾 Cache vacío")
+            print("\nCache vacío")
             return
         
         items = cache_items['items']
         print(f"\n=== ANÁLISIS DEL CACHE ===")
-        print(f"📦 Items en cache: {len(items)}")
+        print(f"Items en cache: {len(items)}")
         
         # Estadísticas de acceso
         access_counts = [item.get('access_count', 0) for item in items]
         response_lengths = [item.get('value_length', 0) for item in items]
         
-        print(f"📊 Accesos promedio por item: {sum(access_counts)/len(access_counts):.1f}")
-        print(f"📏 Longitud promedio de respuesta: {sum(response_lengths)/len(response_lengths):.0f} caracteres")
-        print(f"🔢 Máximo de accesos: {max(access_counts) if access_counts else 0}")
+        print(f"Accesos promedio por item: {sum(access_counts)/len(access_counts):.1f}")
+        print(f"Longitud promedio de respuesta: {sum(response_lengths)/len(response_lengths):.0f} caracteres")
+        print(f"Máximo de accesos: {max(access_counts) if access_counts else 0}")
         
         # Items más accedidos
         if access_counts:
             top_items = sorted(items, key=lambda x: x.get('access_count', 0), reverse=True)[:5]
-            print(f"\n🏆 Top 5 items más accedidos:")
+            print(f"\nTop 5 items más accedidos:")
             for i, item in enumerate(top_items, 1):
                 print(f"   {i}. {item['key']} (accesos: {item.get('access_count', 0)})")
     
@@ -164,7 +164,7 @@ class DataAnalyzer:
     def generate_report(self, data):
         """Generar reporte completo"""
         print("=" * 50)
-        print("📊 REPORTE DE ANÁLISIS DEL SISTEMA DE CACHE")
+        print("REPORTE DE ANÁLISIS DEL SISTEMA DE CACHE")
         print("=" * 50)
         
         if 'metrics' in data:
@@ -185,7 +185,7 @@ class DataAnalyzer:
             self.create_visualizations(metrics_df, perf_df, data.get('cache_items'))
         
         print("\n" + "=" * 50)
-        print("✅ ANÁLISIS COMPLETADO")
+        print("ANÁLISIS COMPLETADO")
         print("=" * 50)
 
 def main():

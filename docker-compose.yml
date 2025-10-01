@@ -1,6 +1,4 @@
 # docker-compose.yml (VERSIÓN CORREGIDA)
-version: '3.8'
-
 services:
   llm-service:
     build:

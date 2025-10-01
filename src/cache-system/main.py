@@ -125,14 +125,14 @@ def save_to_storage(question, expected_answer, llm_answer, quality_metrics, ask_
         )
         
         if response.status_code == 200:
-            logger.info(f"📁 Registro guardado en storage: {question[:50]}...")
+            logger.info(f"Registro guardado en storage: {question[:50]}...")
             return True
         else:
-            logger.error(f"❌ Error guardando en storage: {response.text}")
+            logger.error(f"Error guardando en storage: {response.text}")
             return False
             
     except Exception as e:
-        logger.error(f"❌ Error conectando a storage service: {e}")
+        logger.error(f"Error conectando a storage service: {e}")
         return False
 
 def get_from_storage(question):
@@ -201,7 +201,7 @@ def query():
         if cached_response:
             logger.info(f"Cache HIT for question: {question}")
             
-            # ✅ NUEVO: Actualizar conteo en storage si existe
+            
             if question in QA_DATASET:
                 try:
                     storage_record = get_from_storage(question)
@@ -214,7 +214,7 @@ def query():
                             quality_metrics={'comprehensive_score': storage_record.get('quality_score', 0)},
                             ask_count=storage_record.get('ask_count', 0) + 1
                         )
-                        logger.info(f"📊 Conteo actualizado en storage: {question[:50]}...")
+                        logger.info(f"Conteo actualizado en storage: {question[:50]}...")
                 except Exception as e:
                     logger.error(f"Error actualizando conteo en storage: {e}")
             
@@ -243,7 +243,7 @@ def query():
                 # Evaluar calidad de la respuesta (solo si es miss)
                 quality_evaluation = evaluate_response_quality(question, response_text)
                 
-                # ✅ NUEVO: Guardar en storage si tenemos datos de evaluación
+                
                 if quality_evaluation['evaluated']:
                     save_to_storage(
                         question=question,
@@ -341,7 +341,6 @@ def get_storage_stats():
         logger.error(f"Error getting storage stats: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ... (Mantener los otros endpoints existentes sin cambios)
 
 @app.route('/evaluation/stats', methods=['GET'])
 def evaluation_stats():

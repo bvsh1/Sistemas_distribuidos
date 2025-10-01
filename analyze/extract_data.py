@@ -168,7 +168,7 @@ def main():
     
     # Cargar preguntas de prueba
     try:
-        with open('datasets/10000_sample.json', 'r', encoding='utf-8') as f:
+        with open('datasets/qa_evaluation_10000.json', 'r', encoding='utf-8') as f:
             questions = json.load(f)
         print(f"Loaded {len(questions)} questions for testing")
     except:
