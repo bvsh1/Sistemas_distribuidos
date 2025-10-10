@@ -1,48 +1,91 @@
+# docker-compose.yml (VERSIÓN CORREGIDA)
 services:
   llm-service:
     build:
-      context: ./src/llm-client  
-      dockerfile: Dockerfile    
+      context: ./src/llm-client
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"
     env_file:
       - .env
-    environment:
-      - PYTHONUNBUFFERED=1
     restart: unless-stopped
+    networks:
+      - llm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   cache-service:
     build:
-      context: ./src/cache-system  
+      context: ./src/cache-system
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file:
       - .env
-    environment:
-      - CACHE_POLICY=lru
-      - CACHE_SIZE=1000
-      - CACHE_TTL=3600
-      - LLM_SERVICE_URL=http://llm-service:5000
-      - STORAGE_SERVICE_URL=http://storage-service:8080
     depends_on:
-      - llm-service
+      llm-service:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - llm-network
+    environment:
+      - LLM_SERVICE_URL=http://llm-service:5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   traffic-generator:
     build:
-      context: ./src/traffic-generator  
+      context: ./src/traffic-generator
       dockerfile: Dockerfile
     depends_on:
-      - cache-service
+      cache-service:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - llm-network
     environment:
       - CACHE_SERVICE_URL=http://cache-service:8000
-    restart: unless-stopped
-    volumes:
-      - ./datasets:/app/datasets
 
-# Red network
+  scoring-service:
+    build:
+      context: ./src/scoring
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    networks:
+      - llm-network
+    environment:
+      - CACHE_SERVICE_URL=http://cache-service:8000
+      - LLM_SERVICE_URL=http://llm-service:5000
+    restart: unless-stopped
+
+  # ✅ NUEVO SERVICIO - DENTRO DEL BLOQUE SERVICES
+  storage-service:
+    build:
+      context: ./src/storage
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    networks:
+      - llm-network
+    volumes:
+      - ./storage_data:/app/storage
+    environment:
+      - STORAGE_PORT=8081
+    restart: unless-stopped
+
 networks:
-  default:
-    name: yahoo-answers-network
+  llm-network:
     driver: bridge

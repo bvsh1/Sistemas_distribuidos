@@ -1,154 +1,105 @@
+from enum import Enum
 from typing import Any, Optional, Dict, List
 import time
-from collections import OrderedDict, defaultdict
-import heapq
+import logging
+
+logger = logging.getLogger(__name__)
+
+class CachePolicy(Enum):
+    LRU = "LRU"
+    LFU = "LFU" 
+    FIFO = "FIFO"
 
 class CacheItem:
-    def __init__(self, value: Any, timestamp: float = None):
+    def __init__(self, key: str, value: Any):
+        self.key = key
         self.value = value
-        self.timestamp = timestamp or time.time()
+        self.created_at = time.time()
+        self.accessed_at = time.time()
         self.access_count = 0
-        self.last_access = self.timestamp
 
-    def access(self):
-        self.access_count += 1
-        self.last_access = time.time()
-        return self.value
-
-class CachePolicy:
-    def __init__(self, max_size: int = 1000, ttl: int = 3600):
+class Cache:
+    def __init__(self, max_size: int = 100, policy: CachePolicy = CachePolicy.LRU):
         self.max_size = max_size
-        self.ttl = ttl  # Time to live in seconds
+        self.policy = policy
         self.cache: Dict[str, CacheItem] = {}
         self.hits = 0
         self.misses = 0
         
     def get(self, key: str) -> Optional[Any]:
-        """Obtener valor de la caché"""
         if key in self.cache:
             item = self.cache[key]
-            
-            # Verificar expiración
-            if self.ttl and (time.time() - item.timestamp > self.ttl):
-                self.misses += 1
-                del self.cache[key]
-                return None
-                
+            item.accessed_at = time.time()
+            item.access_count += 1
             self.hits += 1
-            return item.access()
+            logger.debug(f"Cache hit for key: {key}")
+            return item.value
         
         self.misses += 1
+        logger.debug(f"Cache miss for key: {key}")
         return None
-
-    def set(self, key: str, value: Any) -> None:
-        """Guardar valor en la caché"""
-        if self.max_size and len(self.cache) >= self.max_size:
-            self.evict()
+    
+    def put(self, key: str, value: Any) -> None:
+        if key in self.cache:
+            self.cache[key].value = value
+            self.cache[key].accessed_at = time.time()
+            self.cache[key].access_count += 1
+            return
         
-        self.cache[key] = CacheItem(value)
+        if len(self.cache) >= self.max_size:
+            self._evict()
+        
+        self.cache[key] = CacheItem(key, value)
+        logger.debug(f"Added to cache: {key}")
     
-    def evict(self) -> None:
-        """Política de eliminación (debe ser implementada por subclases)"""
-        raise NotImplementedError("Subclasses must implement evict method")
+    def _evict(self) -> None:
+        if not self.cache:
+            return
+            
+        if self.policy == CachePolicy.LRU:
+            key_to_remove = min(self.cache.keys(), 
+                              key=lambda k: self.cache[k].accessed_at)
+        elif self.policy == CachePolicy.LFU:
+            key_to_remove = min(self.cache.keys(),
+                              key=lambda k: self.cache[k].access_count)
+        elif self.policy == CachePolicy.FIFO:
+            key_to_remove = min(self.cache.keys(),
+                              key=lambda k: self.cache[k].created_at)
+        else:
+            key_to_remove = min(self.cache.keys(),
+                              key=lambda k: self.cache[k].accessed_at)
+        
+        removed_item = self.cache.pop(key_to_remove)
+        logger.debug(f"Evicted from cache: {key_to_remove}")
     
-    def stats(self) -> Dict[str, Any]:
-        """Estadísticas de la caché"""
-        total = self.hits + self.misses
-        hit_rate = (self.hits / total * 100) if total > 0 else 0
+    def clear(self) -> None:
+        self.cache.clear()
+        self.hits = 0
+        self.misses = 0
+        logger.info("Cache cleared")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        total_requests = self.hits + self.misses
+        hit_rate = self.hits / total_requests if total_requests > 0 else 0
         
         return {
+            'policy': self.policy.value,
+            'max_size': self.max_size,
+            'current_size': len(self.cache),
             'hits': self.hits,
             'misses': self.misses,
-            'hit_rate': round(hit_rate, 2),
-            'size': len(self.cache),
-            'max_size': self.max_size,
-            'ttl': self.ttl
+            'hit_rate': round(hit_rate, 4),
+            'total_requests': total_requests
         }
-
-class LRUCache(CachePolicy):
-    """Least Recently Used"""
-    def __init__(self, max_size: int = 1000, ttl: int = 3600):
-        super().__init__(max_size, ttl)
-        self.access_order = OrderedDict()
     
-    def get(self, key: str) -> Optional[Any]:
-        item = super().get(key)
-        if item is not None:
-            # Mover al final (más reciente)
-            self.access_order.move_to_end(key)
-        return item
-    
-    def set(self, key: str, value: Any) -> None:
-        super().set(key, value)
-        self.access_order[key] = True
-        self.access_order.move_to_end(key)
-    
-    def evict(self) -> None:
-        # Eliminar el menos recientemente usado
-        if self.access_order:
-            oldest_key = next(iter(self.access_order))
-            del self.cache[oldest_key]
-            del self.access_order[oldest_key]
-
-class LFUCache(CachePolicy):
-    """Least Frequently Used"""
-    def __init__(self, max_size: int = 1000, ttl: int = 3600):
-        super().__init__(max_size, ttl)
-        self.freq_heap = []
-        self.key_map = {}  # key -> (freq, timestamp, key)
-    
-    def get(self, key: str) -> Optional[Any]:
-        item = super().get(key)
-        if item is not None:
-            # Actualizar frecuencia
-            self.key_map[key] = (self.key_map[key][0] + 1, time.time(), key)
-        return item
-    
-    def set(self, key: str, value: Any) -> None:
-        super().set(key, value)
-        self.key_map[key] = (1, time.time(), key)
-    
-    def evict(self) -> None:
-        if self.key_map:
-            # Encontrar el menos frecuentemente usado
-            min_freq = float('inf')
-            victim_key = None
-            
-            for key, (freq, ts, _) in self.key_map.items():
-                if freq < min_freq or (freq == min_freq and ts < self.key_map.get(victim_key, (0, 0, ''))[1]):
-                    min_freq = freq
-                    victim_key = key
-            
-            if victim_key:
-                del self.cache[victim_key]
-                del self.key_map[victim_key]
-
-class FIFOCache(CachePolicy):
-    """First In First Out"""
-    def __init__(self, max_size: int = 1000, ttl: int = 3600):
-        super().__init__(max_size, ttl)
-        self.queue = []
-    
-    def set(self, key: str, value: Any) -> None:
-        super().set(key, value)
-        self.queue.append(key)
-    
-    def evict(self) -> None:
-        if self.queue:
-            # Eliminar el más antiguo
-            oldest_key = self.queue.pop(0)
-            if oldest_key in self.cache:
-                del self.cache[oldest_key]
-
-class CacheFactory:
-    @staticmethod
-    def create_cache(policy: str = 'lru', **kwargs) -> CachePolicy:
-        policy = policy.lower()
-        if policy == 'lru':
-            return LRUCache(**kwargs)
-        elif policy == 'lfu':
-            return LFUCache(**kwargs)
-        elif policy == 'fifo':
-            return FIFOCache(**kwargs)
-        else:
-            raise ValueError(f"Política de caché no soportada: {policy}")
+    def get_items(self) -> List[Dict[str, Any]]:
+        items = []
+        for key, item in self.cache.items():
+            items.append({
+                'key': key[:50] + '...' if len(key) > 50 else key,
+                'value_length': len(str(item.value)),
+                'created_at': item.created_at,
+                'accessed_at': item.accessed_at,
+                'access_count': item.access_count
+            })
+        return items

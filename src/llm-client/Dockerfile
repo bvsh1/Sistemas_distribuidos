@@ -11,13 +11,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 📌 COPIAR solo los archivos de llm-client, no todo el proyecto
-COPY . .
+# Copiar solo los archivos necesarios
+COPY main.py .
 
 # Verificar que los archivos se copiaron correctamente
-RUN echo "Contenido de /app:" && ls -la && \
-    echo "Contenido de /app/config:" && ls -la config/ && \
-    echo "Contenido de /app/services:" && ls -la services/
+RUN echo "Contenido de /app:" && ls -la
 
 EXPOSE 5000
 
