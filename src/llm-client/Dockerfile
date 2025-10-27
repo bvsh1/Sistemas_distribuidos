@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements.txt primero para aprovechar cache de Docker
-COPY requirements.txt .
+COPY src/llm-client/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar solo los archivos necesarios
@@ -19,4 +19,4 @@ RUN echo "Contenido de /app:" && ls -la
 
 EXPOSE 5000
 
-CMD ["python", "main.py"]
+CMD ["python", "app.py"]

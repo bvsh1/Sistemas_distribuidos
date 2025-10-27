@@ -8,7 +8,7 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # 3. Copiar el archivo de requerimientos (desde la raíz)
-COPY requirements.txt .
+COPY src/retry_consumers/requirements.txt .
 
 # 4. Instalar las dependencias
 RUN pip install --no-cache-dir -r requirements.txt

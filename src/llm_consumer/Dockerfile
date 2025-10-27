@@ -7,7 +7,7 @@ WORKDIR /app
 # El 'context' del build es esta carpeta (ej: src/retry_consumers)
 # '..' sube a 'src'
 # '../../' sube a la raíz del proyecto ('Sistemas_distribuidos')
-COPY ../../requirements.txt .
+COPY src/llm_consumer/requirements.txt .
 
 # 4. Instalar las dependencias
 RUN pip install --no-cache-dir -r requirements.txt

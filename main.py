@@ -132,7 +132,7 @@ def collect_llm_responses_for_evaluation(evaluation_dataset):
         try:
             # Hacer la pregunta al cache/LLM
             response = requests.post(
-                "http://localhost:8000/query",
+                "http://localhost:5000/query",
                 json={"question": item["question"]},
                 timeout=15
             )
@@ -174,13 +174,13 @@ def create_sample_dataset():
 if __name__ == "__main__":
     # Verificar que los servicios estén ejecutándose
     try:
-        response = requests.get("http://localhost:8080/health", timeout=5)
+        response = requests.get("http://localhost:5000/health", timeout=5)
         if response.status_code == 200:
             print("Scoring service detectado - ejecutando con evaluación")
             run_system_with_evaluation()
         else:
             print("Scoring service no disponible - ejecutando sin evaluación")
-            run_system_with_real_questions()
+            run_system_with_evaluation()
     except:
         print("Scoring service no disponible - ejecutando sin evaluación")
-        run_system_with_real_questions()
+        run_system_with_evaluation()
