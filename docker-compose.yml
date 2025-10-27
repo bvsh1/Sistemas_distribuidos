@@ -1,9 +1,70 @@
-# docker-compose.yml (VERSIÓN CORREGIDA)
 services:
+  # --- 1. INFRAESTRUCTURA DE KAFKA Y FLINK ---
+  # (Estos no se construyen, así que están bien)
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    container_name: zookeeper
+    networks:
+      - llm-network
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    container_name: kafka
+    networks:
+      - llm-network
+    depends_on:
+      zookeeper:
+        condition: service_started
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  jobmanager:
+    image: flink:1.17-scala_2.12
+    container_name: jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    networks:
+      - llm-network
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+
+  taskmanager:
+    image: flink:1.17-scala_2.12
+    container_name: taskmanager
+    networks:
+      - llm-network
+    depends_on:
+      jobmanager:
+        condition: service_started
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+
+  # --- 2. SERVICIOS DE APLICACIÓN (TU CÓDIGO) ---
+
   llm-service:
     build:
-      context: ./src/llm-client
-      dockerfile: Dockerfile
+      # CORREGIDO: El contexto es la raíz ('.')
+      context: .
+      # CORREGIDO: Ruta completa al Dockerfile
+      dockerfile: ./src/llm-client/Dockerfile
     ports:
       - "5000:5000"
     env_file:
@@ -18,73 +79,117 @@ services:
       retries: 3
       start_period: 10s
 
-  cache-service:
-    build:
-      context: ./src/cache-system
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    depends_on:
-      llm-service:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - llm-network
-    environment:
-      - LLM_SERVICE_URL=http://llm-service:5000
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
   traffic-generator:
     build:
-      context: ./src/traffic-generator
+      # (Este ya estaba bien, asume que su Dockerfile está en la raíz)
+      context: .
       dockerfile: Dockerfile
     depends_on:
-      cache-service:
-        condition: service_healthy
+      kafka:
+        condition: service_started
     restart: "no"
     networks:
       - llm-network
     environment:
-      - CACHE_SERVICE_URL=http://cache-service:8000
+      - KAFKA_BROKER=kafka:29092
 
-  scoring-service:
+  # --- 3. CONSUMIDORES Y WORKERS ASÍNCRONOS ---
+
+  llm_consumer:
     build:
-      context: ./src/scoring
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
+      # CORREGIDO:
+      context: .
+      dockerfile: ./src/llm_consumer/Dockerfile
+    depends_on:
+      llm-service:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: unless-stopped
     networks:
       - llm-network
     environment:
-      - CACHE_SERVICE_URL=http://cache-service:8000
-      - LLM_SERVICE_URL=http://llm-service:5000
-    restart: unless-stopped
+      - KAFKA_BROKER=kafka:29092
+      - LLM_SERVICE_URL=http://llm-service:5000/query
 
-  # ✅ NUEVO SERVICIO - DENTRO DEL BLOQUE SERVICES
-  storage-service:
+  retry_consumer_delay:
     build:
-      context: ./src/storage
-      dockerfile: Dockerfile
-    ports:
-      - "8081:8081"
-    env_file:
-      - .env
+      # CORREGIDO:
+      context: .
+      dockerfile: ./src/retry_consumers/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_started
+    restart: unless-stopped
     networks:
       - llm-network
-    volumes:
-      - ./storage_data:/app/storage
     environment:
-      - STORAGE_PORT=8081
+      - KAFKA_BROKER=kafka:29092
+      - DELAY_SECONDS=60
+    # Asumo que el Dockerfile de retry_consumers usa "delay_consumer.py"
+    # Si no, ajusta el 'dockerfile' o el 'command'
+    command: ["python", "delay_consumer.py"] 
+
+  retry_consumer_backoff:
+    build:
+      # CORREGIDO: Este era el que te daba el error
+      context: .
+      dockerfile: ./src/retry_consumers/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_started
     restart: unless-stopped
+    networks:
+      - llm-network
+    environment:
+      - KAFKA_BROKER=kafka:29092
+      - INITIAL_BACKOFF_SECONDS=5
+    # Asumo que el Dockerfile de retry_consumers usa "backoff_consumer.py"
+    # Si no, ajusta el 'dockerfile' o el 'command'
+    command: ["python", "backoff_consumer.py"]
+
+  flink_python_job:
+    build:
+      # CORREGIDO:
+      context: .
+      dockerfile: ./src/flink_job/Dockerfile
+    depends_on:
+      jobmanager:
+        condition: service_started
+    networks:
+      - llm-network
+    command: >
+      bash -c "
+      until curl -s http://jobmanager:8081/overview | grep -q '\"taskmanagers\":'; do
+        echo 'Esperando a Flink JobManager...'; sleep 5;
+      done;
+      echo 'Enviando job de PyFlink...';
+      flink run -py /app/job.py
+      "
+    environment:
+      - KAFKA_BROKER=kafka:29092
+      - UMBRAL_CALIDAD=0.75
+
+  # --- 4. CONSUMIDOR DE BASE DE DATOS (CONECTADO A ATLAS) ---
+
+  storage_consumer:
+    build:
+      # CORREGIDO:
+      context: .
+      dockerfile: ./src/storage_consumer/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - llm-network
+    env_file:
+      - .env
+    environment:
+      - KAFKA_BROKER=kafka:29092
+    command: ["python", "consumer.py"]
+
+# --- REDES ---
 
 networks:
   llm-network:
